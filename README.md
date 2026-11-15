@@ -4,6 +4,13 @@ Revisa un buzón de correo (IMAP). Cuando llega un aviso de **SINPE Móvil** o *
 nombre, ID/referencia y monto, **notifica al dueño** (Telegram y/o ntfy) y lo guarda en un historial
 consultable en la web, donde también se ve si el correo está siendo revisado y cuándo llegó el último pago.
 
+## Como app en el celular (iPhone y Android)
+Es una PWA con notificaciones push reales (llegan con la app cerrada, como cualquier app):
+1. La web debe servirse por **HTTPS** (obligatorio para push). Opciones simples: Cloudflare Tunnel, Tailscale Funnel o un VPS con Caddy/nginx.
+2. **iPhone** (iOS 16.4 o superior): abrir la URL en **Safari** → Compartir → **Añadir a pantalla de inicio** → abrir la app desde el ícono → **Activar notificaciones**.
+3. **Android**: abrir en Chrome → menú → Instalar app → Activar notificaciones.
+4. Poner en `.env` un `VAPID_SUBJECT` real (`mailto:tu@correo.com`). La clave de push se crea sola en `vapid_private.pem`; **no la borres** o habrá que reactivar las notificaciones en cada dispositivo.
+
 ## Uso
 ```bash
 pip install -r requirements.txt

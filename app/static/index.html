@@ -1,11 +1,20 @@
 <!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Monitor SINPE</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SINPE">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#16794c">
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mut:#667;--ok:#16794c;--bad:#b42318;--bd:#e3e6ea}
 @media(prefers-color-scheme:dark){:root{--bg:#14171a;--card:#1d2125;--tx:#e8eaed;--mut:#9aa3ad;--ok:#4cc38a;--bad:#f97066;--bd:#2c3238}}
 body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
-main{max-width:900px;margin:0 auto;padding:16px}
+main{max-width:900px;margin:0 auto;padding:16px;padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom))}
+button.primary{background:var(--ok);color:#fff;border:0;font-weight:600}
+button,input,select{font-size:16px}
 h1{font-size:20px;margin:0 0 12px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:12px}
 .status{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
@@ -20,6 +29,7 @@ input{flex:1;min-width:140px}
 </style></head><body><main>
 <h1>Monitor SINPE / Transferencias</h1>
 <div class="card status" id="status">Cargando…</div>
+<div class="card" id="pushbox" style="display:none"></div>
 <div class="bar">
  <input id="q" placeholder="Buscar por nombre, ID o asunto">
  <select id="kind"><option value="">SINPE y transferencias</option><option value="simpe">Solo SINPE</option><option value="transferencia">Solo transferencias</option><option value="all">Todos los correos revisados</option></select>
@@ -48,5 +58,26 @@ async function list(){
 }
 $("q").oninput=list;$("kind").onchange=list;
 $("test").onclick=async()=>{const r=await (await fetch("/api/test-notification",{method:"POST"})).json();alert(r.ok?"Enviada":"Error: "+r.error)};
+const standalone=window.matchMedia("(display-mode: standalone)").matches||navigator.standalone;
+const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
+const b64=s=>{const p="=".repeat((4-s.length%4)%4);const r=atob((s+p).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(r,c=>c.charCodeAt(0))};
+async function pushUI(){
+ const box=$("pushbox");box.style.display="block";
+ if(ios&&!standalone){box.innerHTML="📲 <b>Para recibir notificaciones en iPhone:</b> toca <b>Compartir</b> → <b>Añadir a pantalla de inicio</b>, abre la app desde el ícono y activa las notificaciones aquí.";return}
+ if(!("serviceWorker" in navigator)||!("PushManager" in window)){box.textContent="Este navegador no soporta notificaciones push.";return}
+ const reg=await navigator.serviceWorker.register("/sw.js");
+ const sub=await reg.pushManager.getSubscription();
+ if(sub&&Notification.permission==="granted"){box.innerHTML="🔔 Notificaciones activadas en este dispositivo.";return}
+ if(Notification.permission==="denied"){box.textContent="Las notificaciones están bloqueadas. Actívalas en los Ajustes del dispositivo.";return}
+ box.innerHTML='<button class="primary" id="en">🔔 Activar notificaciones</button>';
+ $("en").onclick=async()=>{
+  if(await Notification.requestPermission()!=="granted")return pushUI();
+  const {key}=await (await fetch("/api/push/key")).json();
+  const s=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(key)});
+  await fetch("/api/push/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(s.toJSON())});
+  pushUI();
+ };
+}
+pushUI().catch(e=>{$("pushbox").textContent="Error: "+e.message});
 const tick=()=>{status();list()};tick();setInterval(tick,15000);
 </script></main></body></html>

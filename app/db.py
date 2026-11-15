@@ -26,6 +26,12 @@ def connect(path):
             notified INTEGER DEFAULT 0,
             notify_error TEXT
         );
+        CREATE TABLE IF NOT EXISTS push_subs (
+            endpoint TEXT PRIMARY KEY,
+            p256dh TEXT NOT NULL,
+            auth TEXT NOT NULL,
+            created_at REAL
+        );
         CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT);
         """
     )
@@ -63,3 +69,23 @@ def mark_notified(conn, row_id, error=None):
     with _lock:
         conn.execute("UPDATE emails SET notified=?, notify_error=? WHERE id=?", (0 if error else 1, error, row_id))
         conn.commit()
+
+
+def add_push_sub(conn, endpoint, p256dh, auth):
+    with _lock:
+        conn.execute(
+            "INSERT INTO push_subs(endpoint,p256dh,auth,created_at) VALUES(?,?,?,?) "
+            "ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh, auth=excluded.auth",
+            (endpoint, p256dh, auth, time.time()),
+        )
+        conn.commit()
+
+
+def remove_push_sub(conn, endpoint):
+    with _lock:
+        conn.execute("DELETE FROM push_subs WHERE endpoint=?", (endpoint,))
+        conn.commit()
+
+
+def list_push_subs(conn):
+    return [dict(r) for r in conn.execute("SELECT * FROM push_subs")]

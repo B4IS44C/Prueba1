@@ -51,7 +51,7 @@ def process_message(conn, cfg, raw, fallback_id):
         return None
     row["id"] = row_id
     if row["kind"] != "otro":
-        err = notifier.send(cfg, notifier.build_message(row))
+        err = notifier.send(cfg, notifier.build_message(row), conn=conn, title=notifier.build_title(row))
         db.mark_notified(conn, row_id, err)
         row["notify_error"] = err
     return row
@@ -103,7 +103,7 @@ def run_forever(conn, cfg, stop: threading.Event):
             r = conn.execute("SELECT MAX(received_at) m FROM emails WHERE kind!='otro'").fetchone()
             quiet = r["m"] and (time.time() - r["m"]) > cfg["silence_hours"] * 3600
             if quiet and not alerted:
-                notifier.send(cfg, f"⚠️ Hace más de {cfg['silence_hours']:g} h que no llega ningún SINPE/transferencia.")
+                notifier.send(cfg, conn=conn, title="Sin pagos", text=f"⚠️ Hace más de {cfg['silence_hours']:g} h que no llega ningún SINPE/transferencia.")
                 alerted = True
             elif not quiet:
                 alerted = False

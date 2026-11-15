@@ -5,10 +5,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-from . import db, mailwatch, notifier
+from . import db, mailwatch, notifier, webpush
 from .config import settings
 
 cfg = settings()
@@ -35,11 +36,41 @@ async def lifespan(app):
 
 
 app = FastAPI(title="Monitor SINPE", lifespan=lifespan)
+STATIC = Path(__file__).parent / "static"
+
+
+# Archivos públicos de la PWA (el navegador los pide sin credenciales).
+@app.get("/manifest.webmanifest")
+def manifest():
+    return JSONResponse(
+        {
+            "name": "Monitor SINPE", "short_name": "SINPE", "start_url": "/", "scope": "/",
+            "display": "standalone", "background_color": "#16794c", "theme_color": "#16794c",
+            "icons": [
+                {"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+            ],
+        },
+        media_type="application/manifest+json",
+    )
+
+
+@app.get("/sw.js")
+def service_worker():
+    return FileResponse(STATIC / "sw.js", media_type="application/javascript", headers={"Service-Worker-Allowed": "/"})
+
+
+@app.get("/static/{name}")
+def static_file(name: str):
+    f = (STATIC / name).resolve()
+    if f.parent != STATIC.resolve() or not f.is_file() or name == "index.html":
+        raise HTTPException(404)
+    return FileResponse(f)
 
 
 @app.get("/", dependencies=[Depends(auth)])
 def index():
-    return FileResponse(Path(__file__).parent / "static" / "index.html")
+    return FileResponse(STATIC / "index.html")
 
 
 @app.get("/api/transactions", dependencies=[Depends(auth)])
@@ -75,5 +106,32 @@ def status():
 
 @app.post("/api/test-notification", dependencies=[Depends(auth)])
 def test_notification():
-    err = notifier.send(cfg, "🔔 Prueba: las notificaciones funcionan.")
+    err = notifier.send(cfg, "🔔 Prueba: las notificaciones funcionan.", conn=conn, title="Prueba")
     return {"ok": err is None, "error": err}
+
+
+class PushKeys(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSub(BaseModel):
+    endpoint: str
+    keys: PushKeys
+
+
+@app.get("/api/push/key", dependencies=[Depends(auth)])
+def push_key():
+    return {"key": webpush.public_key_b64(notifier.vapid_key(cfg))}
+
+
+@app.post("/api/push/subscribe", dependencies=[Depends(auth)])
+def push_subscribe(sub: PushSub):
+    db.add_push_sub(conn, sub.endpoint, sub.keys.p256dh, sub.keys.auth)
+    return {"ok": True, "devices": len(db.list_push_subs(conn))}
+
+
+@app.post("/api/push/unsubscribe", dependencies=[Depends(auth)])
+def push_unsubscribe(sub: PushSub):
+    db.remove_push_sub(conn, sub.endpoint)
+    return {"ok": True}

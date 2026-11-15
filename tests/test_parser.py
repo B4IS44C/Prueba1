@@ -38,7 +38,7 @@ def test_irrelevante():
 
 def test_pipeline_dedupe_and_notify(monkeypatch):
     sent = []
-    monkeypatch.setattr(notifier, "send", lambda cfg, text: sent.append(text))
+    monkeypatch.setattr(notifier, "send", lambda cfg, text, **kw: sent.append(text))
     conn = db.connect(":memory:")
     cfg = {"allowed_senders": ["banco"]}
     raw = (b"From: Banco <avisos@banco.cr>\nSubject: SINPE Movil\nMessage-ID: <a1>\n"
@@ -48,3 +48,35 @@ def test_pipeline_dedupe_and_notify(monkeypatch):
     assert len(sent) == 1 and "Ana Soto" in sent[0] and "555123" in sent[0] and "7,500.00" in sent[0]
     other = raw.replace(b"Banco <avisos@banco.cr>", b"Otro <spam@x.com>").replace(b"<a1>", b"<a2>")
     assert mailwatch.process_message(conn, cfg, other, "y") is None  # remitente no permitido
+
+
+def test_webpush_roundtrip_and_vapid(tmp_path):
+    """Cifra como el servidor y descifra como lo haría el navegador (RFC 8291)."""
+    import os
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    from app import webpush
+
+    ua = ec.generate_private_key(ec.SECP256R1())
+    ua_pub = webpush._pub_bytes(ua.public_key())
+    auth = os.urandom(16)
+    body = webpush.encrypt(b'{"title":"hola"}', webpush.b64e(ua_pub), webpush.b64e(auth))
+    salt, idlen = body[:16], body[20]
+    as_pub, ct = body[21:21 + idlen], body[21 + idlen:]
+    secret = ua.exchange(ec.ECDH(), ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), as_pub))
+    ikm = HKDF(hashes.SHA256(), 32, auth, b"WebPush: info\0" + ua_pub + as_pub).derive(secret)
+    cek = HKDF(hashes.SHA256(), 16, salt, b"Content-Encoding: aes128gcm\0").derive(ikm)
+    nonce = HKDF(hashes.SHA256(), 12, salt, b"Content-Encoding: nonce\0").derive(ikm)
+    assert AESGCM(cek).decrypt(nonce, ct, None) == b'{"title":"hola"}\x02'
+
+    key = webpush.load_or_create_key(str(tmp_path / "k.pem"))
+    assert webpush.load_or_create_key(str(tmp_path / "k.pem")).private_numbers() == key.private_numbers()
+    h = webpush.vapid_header(key, "https://web.push.apple.com/abc", "mailto:a@b.cr")
+    jwt = h.split("t=")[1].split(",")[0]
+    head, claims, sig = jwt.split(".")
+    from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+    raw = webpush.b64d(sig)
+    key.public_key().verify(encode_dss_signature(int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big")),
+                            f"{head}.{claims}".encode(), ec.ECDSA(hashes.SHA256()))

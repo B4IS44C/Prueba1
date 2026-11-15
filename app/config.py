@@ -34,4 +34,6 @@ def settings():
         "ntfy_server": env("NTFY_SERVER", "https://ntfy.sh").rstrip("/"),
         "silence_hours": float(env("SILENCE_ALERT_HOURS", "0")),
         "db_path": env("DB_PATH", "data.db"),
+        "vapid_key_file": env("VAPID_KEY_FILE", "vapid_private.pem"),
+        "vapid_subject": env("VAPID_SUBJECT", "mailto:admin@example.com"),
     }
