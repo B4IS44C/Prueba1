@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Monitor SINPE</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SINPE">
+<meta name="theme-color" content="#16794c">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mut:#667;--ok:#16794c;--bad:#b42318;--bd:#e3e6ea}
+@media(prefers-color-scheme:dark){:root{--bg:#14171a;--card:#1d2125;--tx:#e8eaed;--mut:#9aa3ad;--ok:#4cc38a;--bad:#f97066;--bd:#2c3238}}
+body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+main{max-width:900px;margin:0 auto;padding:16px;padding-top:max(16px,env(safe-area-inset-top));padding-bottom:max(16px,env(safe-area-inset-bottom))}
+h1{font-size:20px;margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:12px}
+.status{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.ok{background:var(--ok)}.bad{background:var(--bad)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+input,select,button{font:inherit;font-size:16px;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+input{flex:1;min-width:140px}
+button.primary{background:var(--ok);color:#fff;border:0;font-weight:600}
+.tx{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--bd)}
+.tx:last-child{border:0}.amt{font-weight:600;white-space:nowrap}
+.mut{color:var(--mut);font-size:13px}.tag{font-size:12px;padding:2px 6px;border-radius:6px;border:1px solid var(--bd)}
+[hidden]{display:none!important}
+</style></head><body><main>
+<h1>Monitor SINPE / Transferencias</h1>
+
+<div class="card" id="login" hidden>
+  <p>Inicie sesión con la cuenta de Google del dueño.</p>
+  <button class="primary" id="signin">Entrar con Google</button>
+  <p class="mut" id="loginerr"></p>
+</div>
+
+<div id="app" hidden>
+  <div class="card status" id="status">Cargando…</div>
+  <div class="card" id="pushbox"></div>
+  <div class="bar">
+    <input id="q" placeholder="Buscar por nombre, ID o asunto">
+    <select id="kind">
+      <option value="">SINPE y transferencias</option><option value="simpe">Solo SINPE</option>
+      <option value="transferencia">Solo transferencias</option><option value="all">Todos los correos revisados</option>
+    </select>
+    <button id="test">Probar notificación</button>
+    <button id="out">Salir</button>
+  </div>
+  <div class="card" id="list"></div>
+</div>
+<script type="module" src="/app.js"></script>
+</main></body></html>

@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Solo el dueño (registrado por la función claimOwner) puede leer. Las funciones escriben con permisos de admin.
+    function isOwner() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/config/owner)
+        && get(/databases/$(database)/documents/config/owner).data.uid == request.auth.uid;
+    }
+    match /emails/{id}  { allow read: if isOwner(); allow write: if false; }
+    match /state/{id}   { allow read: if isOwner(); allow write: if false; }
+    match /config/{id}  { allow read, write: if false; }
+    match /devices/{token} { allow read, create, update, delete: if isOwner(); }
+  }
+}
