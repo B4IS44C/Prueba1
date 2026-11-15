@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Monitor SINPE</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mut:#667;--ok:#16794c;--bad:#b42318;--bd:#e3e6ea}
+@media(prefers-color-scheme:dark){:root{--bg:#14171a;--card:#1d2125;--tx:#e8eaed;--mut:#9aa3ad;--ok:#4cc38a;--bad:#f97066;--bd:#2c3238}}
+body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+main{max-width:900px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;margin-bottom:12px}
+.status{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.ok{background:var(--ok)}.bad{background:var(--bad)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+input,select,button{font:inherit;padding:8px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--tx)}
+input{flex:1;min-width:140px}
+.tx{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--bd)}
+.tx:last-child{border:0}.amt{font-weight:600;white-space:nowrap}
+.mut{color:var(--mut);font-size:13px}.tag{font-size:12px;padding:2px 6px;border-radius:6px;border:1px solid var(--bd)}
+</style></head><body><main>
+<h1>Monitor SINPE / Transferencias</h1>
+<div class="card status" id="status">Cargando…</div>
+<div class="bar">
+ <input id="q" placeholder="Buscar por nombre, ID o asunto">
+ <select id="kind"><option value="">SINPE y transferencias</option><option value="simpe">Solo SINPE</option><option value="transferencia">Solo transferencias</option><option value="all">Todos los correos revisados</option></select>
+ <button id="test">Probar notificación</button>
+</div>
+<div class="card" id="list"></div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ago=t=>{if(!t)return"nunca";const s=Math.round(Date.now()/1000-t);return s<60?`hace ${s}s`:s<3600?`hace ${Math.round(s/60)} min`:s<86400?`hace ${Math.round(s/3600)} h`:new Date(t*1000).toLocaleString()};
+const money=(a,c)=>a==null?"—":(c==="USD"?"$":"₡")+a.toLocaleString("es-CR",{minimumFractionDigits:2});
+async function status(){
+ const s=await (await fetch("/api/status")).json();
+ const okMail=s.mail_configured&&!s.last_error;
+ $("status").innerHTML=`<span><span class="dot ${okMail?"ok":"bad"}"></span>${!s.mail_configured?"Correo sin configurar":s.last_error?"Error de correo: "+esc(s.last_error):"Revisando el correo ("+ago(s.last_check)+")"}</span>
+ <span>Último pago: <b>${ago(s.last_transaction)}</b></span><span>Hoy: <b>${s.today_count}</b></span>`;
+}
+async function list(){
+ const p=new URLSearchParams({kind:$("kind").value,q:$("q").value});
+ const rows=await (await fetch("/api/transactions?"+p)).json();
+ $("list").innerHTML=rows.length?rows.map(r=>`<div class="tx"><div>
+  <b>${esc(r.person||"Nombre no detectado")}</b> <span class="tag">${r.kind==="simpe"?"SINPE":r.kind==="transferencia"?"Transferencia":"Otro"}</span> <span class="tag">${esc(r.direction)}</span><br>
+  <span class="mut">ID: ${esc(r.reference||"—")} · ${esc(r.sent_at||new Date(r.received_at*1000).toLocaleString())}</span><br>
+  <span class="mut">${r.kind==="otro"?esc(r.subject):r.notified?"🔔 Notificado":"⚠️ No notificado: "+esc(r.notify_error||"")}</span></div>
+  <div class="amt">${money(r.amount,r.currency)}</div></div>`).join(""):"<span class='mut'>Aún no hay registros.</span>";
+}
+$("q").oninput=list;$("kind").onchange=list;
+$("test").onclick=async()=>{const r=await (await fetch("/api/test-notification",{method:"POST"})).json();alert(r.ok?"Enviada":"Error: "+r.error)};
+const tick=()=>{status();list()};tick();setInterval(tick,15000);
+</script></main></body></html>
